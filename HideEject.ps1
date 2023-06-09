@@ -1,15 +1,30 @@
 ﻿$DEVICE_CAPABILITIES = @{
   # As defined in cfgmgr32.h
-  'EJECTSUPPORTED' = 0x00000002;
   'REMOVABLE' = 0x00000004;
 }
 
-$HIDE_EJECT_MASK = -bnot ($DEVICE_CAPABILITIES['EJECTSUPPORTED'] -bor $DEVICE_CAPABILITIES['REMOVABLE']);
-$REGISTRY_ROOT = 'REGISTRY::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\'
-$CapabilityUpdateScheduleName = "Hide-Device"
+$HIDE_EJECT_MASK = -bnot $DEVICE_CAPABILITIES['REMOVABLE'];
+$REGISTRY_ROOT = 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\'
+$CapabilityUpdateScheduleName = "Hide-Eject"
+
+function Restart-Explorer () {
+  $OpenWindowObjects = @((New-Object -com shell.application).Windows()).Document.Folder
+  $OpenWindowPaths = $OpenWindowObjects | Select-Object -Property @{ Name="Path"; Expression={ $_.Self.Path } }
+  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+  
+  Start-Sleep -Milliseconds 500
+  while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) {
+    Start-Process explorer.exe
+    Start-Sleep -Milliseconds 500
+  }
+
+  foreach ($p in $OpenWindowPaths) {
+    Invoke-Item "$($p.Path)" -ErrorAction SilentlyContinue
+  }
+}
 
 function Find-CapabilityUpdateSchedule () {
-  $ScheduledTask = Get-ScheduledJob -Name $CapabilityUpdateScheduleName -ErrorAction 0
+  $ScheduledTask = Get-ScheduledJob -Name $CapabilityUpdateScheduleName -ErrorAction SilentlyContinue
   return $ScheduledTask
 }
 
@@ -45,8 +60,7 @@ function Add-CapabilityUpdateSchedule () {
   if ($CodeArray) {
     $CodeString = $CodeArray -join ';'
   }
-
-  $CodeString += "Set-ItemProperty -Name Capabilities -Path `"$($RegistryPath)`" -Value $($UpdatedCapabilities) -EA 0;"
+  $CodeString += "REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f;"
   $Code = [scriptblock]::Create($CodeString)
 
   $null = Register-ScheduledJob -Name $CapabilityUpdateScheduleName -Trigger $Trigger -ScheduledJobOption $Options -ScriptBlock $Code
@@ -94,7 +108,7 @@ function Get-DeviceCurrentCapabilities () {
   )
 
   $RegistryPath = $REGISTRY_ROOT + $CimInstance.InstanceId
-  return Get-ItemPropertyValue -Name Capabilities -Path $RegistryPath -EA Stop
+  return Get-ItemPropertyValue -Name Capabilities -Path "REGISTRY::$($RegistryPath)" -EA Stop
 }
 
 function Hide-Eject () {
@@ -125,8 +139,8 @@ function Hide-Eject () {
     return
   }
 
-  Set-ItemProperty -Name Capabilities -Path $RegistryPath -Value $UpdatedCapabilities -EA Stop
-  Stop-Process -Name explorer -Force
+  REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f
+  Restart-Explorer
 
   if ($Permanent) {
     Add-CapabilityUpdateSchedule $RegistryPath $UpdatedCapabilities
@@ -134,4 +148,4 @@ function Hide-Eject () {
   Write-Host "`nComplete.`n"
 }
 
-Write-Host "Hide Eject Loaded. [v0.1]`n"
+Write-Host "Hide Eject Loaded. [v0.3]`n"
