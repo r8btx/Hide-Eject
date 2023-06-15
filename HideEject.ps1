@@ -9,9 +9,9 @@ $CapabilityUpdateScheduleName = "Hide-Eject"
 
 function Restart-Explorer () {
   $OpenWindowObjects = @((New-Object -com shell.application).Windows()).Document.Folder
-  $OpenWindowPaths = $OpenWindowObjects | Select-Object -Property @{ Name="Path"; Expression={ $_.Self.Path } }
+  $OpenWindowPaths = $OpenWindowObjects | Select-Object -Property @{ Name = "Path"; Expression = { $_.Self.Path } }
   Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-  
+
   Start-Sleep -Milliseconds 500
   while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) {
     Start-Process explorer.exe
@@ -116,6 +116,7 @@ function Hide-Eject () {
   param(
     [Parameter(ValueFromPipeline = $true,ValueFromPipelineByPropertyName = $true,Mandatory = $true,Position = 0)]
     [Alias("InputObject")]
+    [ValidateNotNullOrEmpty()]
     [Microsoft.Management.Infrastructure.CimInstance[]]
     $CimInstance,
 
@@ -126,26 +127,34 @@ function Hide-Eject () {
     $Rollback
   )
 
-  Write-Host "Hide-Eject was called with the following options:"
-  Write-Host "{ $($MyInvocation.BoundParameters.Keys) }`n"
-
-  $CurrentCapabilities = Get-DeviceCurrentCapabilities $CimInstance
-  $UpdatedCapabilities = $CurrentCapabilities -band $HIDE_EJECT_MASK;
-  $RegistryPath = $REGISTRY_ROOT + $CimInstance.InstanceId
-
-  if ($Rollback) {
-    Remove-CapabilityUpdateSchedule $RegistryPath
-    Write-Host "Complete.`n"
-    return
+  begin {
+    Write-Host "Hide-Eject was called with the following options:"
   }
 
-  REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f
-  Restart-Explorer
+  process {
+    if (!$PrintedOptions) { Write-Host "{ $($MyInvocation.BoundParameters.Keys) }`n" }
+    $PrintedOptions = $true
 
-  if ($Permanent) {
-    Add-CapabilityUpdateSchedule $RegistryPath $UpdatedCapabilities
+    foreach ($Instance in $CimInstance) {
+      $CurrentCapabilities = Get-DeviceCurrentCapabilities $Instance
+      $UpdatedCapabilities = $CurrentCapabilities -band $HIDE_EJECT_MASK;
+      $RegistryPath = $REGISTRY_ROOT + $Instance.InstanceId
+
+      if ($Rollback) {
+        Remove-CapabilityUpdateSchedule $RegistryPath
+      } else {
+        REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f
+        if ($Permanent) {
+          Add-CapabilityUpdateSchedule $RegistryPath $UpdatedCapabilities
+        }
+      }
+    }
   }
-  Write-Host "`nComplete.`n"
+
+  end {
+    if (!$Rollback) { Restart-Explorer }
+    Write-Host "`nComplete.`n"
+  }
 }
 
-Write-Host "Hide Eject Loaded. [v0.3]`n"
+Write-Host "Hide Eject Loaded. [v0.4]`n"
