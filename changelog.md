@@ -2,6 +2,8 @@
 
 ## Hide Eject
 
+[v0.5] Refresh System Tray icon without restarting Windows File Explorer  
+[v0.5] Minor edit  
 [v0.4] Handling of piped multiple CimInstances  
 [v0.3] Changed how registry values are modified  
 [v0.3] Restore Windows File Explorer windows after restarting the process.  
@@ -10,6 +12,7 @@
 
 ## Interactive Layer
 
+[v0.2] Removed "Explorer Restart" warning  
 [v0.1] Interactive layer
 
 ## Launcher (Launch Interactive.cmd)

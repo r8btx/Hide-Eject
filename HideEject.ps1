@@ -1,25 +1,20 @@
 ﻿$DEVICE_CAPABILITIES = @{
   # As defined in cfgmgr32.h
-  'REMOVABLE' = 0x00000004;
+  'EJECTSUPPORTED' = 0x00000002;
+  'REMOVABLE'      = 0x00000004;
 }
 
-$HIDE_EJECT_MASK = -bnot $DEVICE_CAPABILITIES['REMOVABLE'];
-$REGISTRY_ROOT = 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\'
+$HIDE_EJECT_MASK = -bnot ($DEVICE_CAPABILITIES['EJECTSUPPORTED'] -bor $DEVICE_CAPABILITIES['REMOVABLE']);
+$REGISTRY_INSTANCEROOT = 'REGISTRY::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\'
 $CapabilityUpdateScheduleName = "Hide-Eject"
 
-function Restart-Explorer () {
-  $OpenWindowObjects = @((New-Object -com shell.application).Windows()).Document.Folder
-  $OpenWindowPaths = $OpenWindowObjects | Select-Object -Property @{ Name = "Path"; Expression = { $_.Self.Path } }
-  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-
-  Start-Sleep -Milliseconds 500
-  while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) {
-    Start-Process explorer.exe
-    Start-Sleep -Milliseconds 500
-  }
-
-  foreach ($p in $OpenWindowPaths) {
-    Invoke-Item "$($p.Path)" -ErrorAction SilentlyContinue
+function Update-SystemTray () {
+  Start-Sleep -Milliseconds 300  # Useful during the scheduled operation. Fix this later?
+  $SysTrayRegPath = 'REGISTRY::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Applets\SysTray'
+  $OriginalValue = Get-ItemPropertyValue -Name Services -Path $SysTrayRegPath -ErrorAction SilentlyContinue
+  Set-ItemProperty -Name Services -Path $SysTrayRegPath -Value 29
+  If (&systray.exe) {
+    Set-ItemProperty -Name Services -Path $SysTrayRegPath -Value $OriginalValue -ErrorAction SilentlyContinue
   }
 }
 
@@ -30,11 +25,11 @@ function Find-CapabilityUpdateSchedule () {
 
 function Add-CapabilityUpdateSchedule () {
   param(
-    [Parameter(Mandatory = $true,Position = 0)]
+    [Parameter(Mandatory = $true, Position = 0)]
     [string]
     $RegistryPath,
 
-    [Parameter(Mandatory = $true,Position = 1)]
+    [Parameter(Mandatory = $true, Position = 1)]
     [int]
     $UpdatedCapabilities
   )
@@ -46,6 +41,7 @@ function Add-CapabilityUpdateSchedule () {
   $RegisteredCode = $null
   $CodeArray = $null
   $CodeString = ""
+  $SysTrayCodeBlock = (Get-Command -Name Update-SystemTray).ScriptBlock.ToString() -Replace "`r`n\s*", ";"
 
   if ($ScheduledTask) {
     $CodeArray = $ScheduledTask.Command.Split(';')
@@ -59,8 +55,11 @@ function Add-CapabilityUpdateSchedule () {
 
   if ($CodeArray) {
     $CodeString = $CodeArray -join ';'
+    $Idx = $CodeString.IndexOf(';;')
+    $CodeString = $CodeString.Substring(0, $Idx) + ';'
   }
-  $CodeString += "REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f;"
+  $CodeString += "Set-ItemProperty -Name Capabilities -Path `"$($RegistryPath)`" -Value $($UpdatedCapabilities) -EA 0;"
+  $CodeString += $SysTrayCodeBlock
   $Code = [scriptblock]::Create($CodeString)
 
   $null = Register-ScheduledJob -Name $CapabilityUpdateScheduleName -Trigger $Trigger -ScheduledJobOption $Options -ScriptBlock $Code
@@ -68,7 +67,7 @@ function Add-CapabilityUpdateSchedule () {
 
 function Remove-CapabilityUpdateSchedule () {
   param(
-    [Parameter(Mandatory = $true,Position = 0)]
+    [Parameter(Mandatory = $true, Position = 0)]
     [string]
     $RegistryPath
   )
@@ -80,7 +79,8 @@ function Remove-CapabilityUpdateSchedule () {
 
   if ($ScheduledTask) {
     $CodeArray = $ScheduledTask.Command.Split(';')
-  } else {
+  }
+  else {
     Write-Host $Message
     return
   }
@@ -88,12 +88,15 @@ function Remove-CapabilityUpdateSchedule () {
   $RemovedCode = $CodeArray | Where-Object { !$_.Contains($RegistryPath) }
   if ($CodeArray.Count -eq $RemovedCode.Count) {
     Write-Host $Message
-  } else {
+  }
+  else {
     $CodeString = $RemovedCode -join ';'
     $Code = [scriptblock]::Create($CodeString)
+    $Trigger = New-JobTrigger -AtStartup
+    $Options = New-ScheduledJobOption -RunElevated -StartIfOnBattery
 
     Unregister-ScheduledJob $ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
-    if ($RemovedCode.Count -gt 1) {
+    if (($CodeArray | Where-Object { $_.Contains($REGISTRY_INSTANCEROOT) }).Count -gt 1) {
       $null = Register-ScheduledJob -Name $CapabilityUpdateScheduleName -Trigger $Trigger -ScheduledJobOption $Options -ScriptBlock $Code
     }
   }
@@ -102,19 +105,19 @@ function Remove-CapabilityUpdateSchedule () {
 function Get-DeviceCurrentCapabilities () {
   [CmdletBinding()]
   param(
-    [Parameter(Mandatory = $true,Position = 0)]
+    [Parameter(Mandatory = $true, Position = 0)]
     [Microsoft.Management.Infrastructure.CimInstance[]]
     $CimInstance
   )
 
-  $RegistryPath = $REGISTRY_ROOT + $CimInstance.InstanceId
-  return Get-ItemPropertyValue -Name Capabilities -Path "REGISTRY::$($RegistryPath)" -EA Stop
+  $RegistryPath = $REGISTRY_INSTANCEROOT + $CimInstance.InstanceId
+  return Get-ItemPropertyValue -Name Capabilities -Path $RegistryPath -EA Stop
 }
 
 function Hide-Eject () {
   [CmdletBinding()]
   param(
-    [Parameter(ValueFromPipeline = $true,ValueFromPipelineByPropertyName = $true,Mandatory = $true,Position = 0)]
+    [Parameter(ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, Mandatory = $true, Position = 0)]
     [Alias("InputObject")]
     [ValidateNotNullOrEmpty()]
     [Microsoft.Management.Infrastructure.CimInstance[]]
@@ -138,12 +141,13 @@ function Hide-Eject () {
     foreach ($Instance in $CimInstance) {
       $CurrentCapabilities = Get-DeviceCurrentCapabilities $Instance
       $UpdatedCapabilities = $CurrentCapabilities -band $HIDE_EJECT_MASK;
-      $RegistryPath = $REGISTRY_ROOT + $Instance.InstanceId
+      $RegistryPath = $REGISTRY_INSTANCEROOT + $Instance.InstanceId
 
       if ($Rollback) {
         Remove-CapabilityUpdateSchedule $RegistryPath
-      } else {
-        REG.exe ADD `"$($RegistryPath)`" /v Capabilities /t REG_DWORD /d $($UpdatedCapabilities) /f
+      }
+      else {
+        Set-ItemProperty -Name Capabilities -Path $RegistryPath -Value $UpdatedCapabilities -EA Stop
         if ($Permanent) {
           Add-CapabilityUpdateSchedule $RegistryPath $UpdatedCapabilities
         }
@@ -152,9 +156,9 @@ function Hide-Eject () {
   }
 
   end {
-    if (!$Rollback) { Restart-Explorer }
+    if (!$Rollback) { Update-SystemTray }
     Write-Host "`nComplete.`n"
   }
 }
 
-Write-Host "Hide Eject Loaded. [v0.4]`n"
+Write-Host "Hide Eject Loaded. [v0.5]`n"
