@@ -1,6 +1,6 @@
 # Hide Eject
 
-Hide devices from appearing in [Safely Remove Hardware feature](./img/problem_safeRemoval.jpg).
+Hide devices from appearing in [Safely Remove Hardware feature](./img/problem_safeRemoval.png).
 
 For example, you don't have to see this anymore:  
 <img src="./img/problem_deviceEject.png" width="400"/>
