@@ -15,6 +15,10 @@
 [v0.2] Removed "Explorer Restart" warning  
 [v0.1] Interactive layer
 
-## Launcher (Launch Interactive.cmd)
+## AutoFix
+
+[v0.1] Automatically detect devices that are shown in the 'Safely Remove Hardware' list and hide them permanently.
+
+## Launcher (Launch Interactive.cmd, etc.)
 
 [v0.1] Simple PowerShell script launcher.
