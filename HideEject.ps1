@@ -8,13 +8,19 @@ $HIDE_EJECT_MASK = -bnot ($DEVICE_CAPABILITIES['EJECTSUPPORTED'] -bor $DEVICE_CA
 $REGISTRY_INSTANCEROOT = 'REGISTRY::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\'
 $CapabilityUpdateScheduleName = "Hide-Eject"
 
-function Update-SystemTray () {
-  Start-Sleep -Milliseconds 300  # Useful during the scheduled operation. Fix this later?
-  $SysTrayRegPath = 'REGISTRY::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Applets\SysTray'
-  $OriginalValue = Get-ItemPropertyValue -Name Services -Path $SysTrayRegPath -ErrorAction SilentlyContinue
-  Set-ItemProperty -Name Services -Path $SysTrayRegPath -Value 29
-  If (&systray.exe) {
-    Set-ItemProperty -Name Services -Path $SysTrayRegPath -Value $OriginalValue -ErrorAction SilentlyContinue
+function Restart-Explorer () {
+  $OpenWindowObjects = @((New-Object -com shell.application).Windows()).Document.Folder
+  $OpenWindowPaths = $OpenWindowObjects | Select-Object -Property @{ Name = "Path"; Expression = { $_.Self.Path } }
+  Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+
+  Start-Sleep -Milliseconds 500
+  while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue)) {
+    Start-Process explorer.exe
+    Start-Sleep -Milliseconds 500
+  }
+
+  foreach ($p in $OpenWindowPaths) {
+    Invoke-Item "$($p.Path)" -ErrorAction SilentlyContinue
   }
 }
 
@@ -41,7 +47,7 @@ function Add-CapabilityUpdateSchedule () {
   $RegisteredCode = $null
   $CodeArray = $null
   $CodeString = ""
-  $SysTrayCodeBlock = (Get-Command -Name Update-SystemTray).ScriptBlock.ToString() -Replace "`r`n\s*", ";"
+  $SysTrayCodeBlock = (Get-Command -Name Restart-Explorer).ScriptBlock.ToString() -Replace "`r`n\s*", ";"
 
   if ($ScheduledTask) {
     $CodeArray = $ScheduledTask.Command.Split(';')
@@ -156,9 +162,9 @@ function Hide-Eject () {
   }
 
   end {
-    if (!$Rollback) { Update-SystemTray }
+    if (!$Rollback) { Restart-Explorer }
     Write-Host "`nComplete.`n"
   }
 }
 
-Write-Host "Hide Eject Loaded. [v0.5]`n"
+Write-Host "Hide Eject Loaded. [v0.6]`n"

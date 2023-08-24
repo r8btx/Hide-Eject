@@ -12,10 +12,10 @@
 }
 
 function Start-AutoFix {
-  Write-Red "---------------------------------------------------------------------------------------------"
-  Write-Red "This script modifies registry values and adds a scheduled task."
+  Write-Red "-----------------------------------------------------------------------------------------------"
+  Write-Red "This script modifies registry values, restarts Windows File Explorer and adds a scheduled task."
   Write-Red "By using this script, you are fully responsible for any harm or damage caused by this script."
-  Write-Red "---------------------------------------------------------------------------------------------"
+  Write-Red "-----------------------------------------------------------------------------------------------"
   Write-Host
 
   Write-Host "Disconnect all devices and leave only the devices that need to be processed."

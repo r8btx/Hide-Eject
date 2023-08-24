@@ -87,9 +87,11 @@ function Get-HideEjectConfirmation {
   switch ($TargetDevice.Action) {
     "Hide" {
       Write-Host "  - Editing Registry Values"
+      Write-Host "  - Restarting Windows File Explorer"
     }
     "Permanent" {
       Write-Host "  - Editing Registry Values"
+      Write-Host "  - Restarting Windows File Explorer"
       Write-Host "  - Modifying Task Schedule"
     }
     "Rollback" {

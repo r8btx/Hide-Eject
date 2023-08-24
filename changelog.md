@@ -2,6 +2,7 @@
 
 ## Hide Eject
 
+[v0.6] Partially Reverted v0.5  
 [v0.5] Refresh System Tray icon without restarting Windows File Explorer  
 [v0.5] Minor edit  
 [v0.4] Handling of piped multiple CimInstances  
@@ -12,7 +13,6 @@
 
 ## Interactive Layer
 
-[v0.2] Removed "Explorer Restart" warning  
 [v0.1] Interactive layer
 
 ## AutoFix
