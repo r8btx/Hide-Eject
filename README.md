@@ -49,3 +49,5 @@ ALIASES
 - [Microsoft Support: Internal SATA Drives show up as removeable media](https://support.microsoft.com/en-us/topic/internal-sata-drives-show-up-as-removeable-media-1f806a64-8661-95a6-adc7-ce65a976c8dd)
 - [superuser: Internal hard drives showing as removable in Windows 10](https://superuser.com/questions/1010792)
 - [DEVPKEY_Device_SafeRemovalRequired](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/devpkey-device-saferemovalrequired)
+- [Gracefully restarting explorer.exe](https://stackoverflow.com/questions/46436549)
+- [Restore previous explorer.exe session after restarting it](https://superuser.com/a/1770244)
